@@ -28,7 +28,7 @@ class Checkmarx:
 
     def __authenticate(self):
         response = requests.post(
-            AUTH_API_PATH,
+            self.api_url + AUTH_API_PATH,
             headers = {
                 "Content-Type": "application/x-www-form-urlencoded"
             },
