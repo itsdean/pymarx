@@ -7,9 +7,18 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "-u",
         "--url",
         help = "The URL of the Checkmarx instance to connect to"
+    )
+
+    parser.add_argument(
+        "--username",
+        help = "The username to authenticate to Checkmarx with"
+    )
+
+    parser.add_argument(
+        "--password",
+        help = "The password to authenticate to Checkmarx with"
     )
 
     arguments = parser.parse_args()
