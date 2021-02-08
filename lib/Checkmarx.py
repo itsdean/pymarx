@@ -45,7 +45,7 @@ class Checkmarx:
         if response.status_code == 200:
             print("Authenticated to API")
         else:
-            print("Did not authenticate - got " + response.status_code + " instead")
+            print("Did not authenticate - got " + str(response.status_code) + " instead")
 
 
     def __init__(self, args):
