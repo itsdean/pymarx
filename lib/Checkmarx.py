@@ -65,9 +65,13 @@ class Checkmarx:
             return json.loads(response.text)["access_token"]
 
         else:
+<<<<<<< HEAD
             print("> Could not authenticate!")
             self.__fail(response)
             exit(-2)
+=======
+            print("Did not authenticate - got " + str(response.status_code) + " instead")
+>>>>>>> 1dad3a020c3cfa992305e1add9d8780e6912aa24
 
 
     def __init__(self, args):
