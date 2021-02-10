@@ -2,7 +2,7 @@ import argparse
 import zipfile
 
 from lib.Checkmarx import Checkmarx
-
+from lib.constants import *
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -43,13 +43,6 @@ def parse_arguments():
         help = "A comment to be left with the scan"
     )
 
-    # parser.add_argument(
-    #     "--wait",
-    #     default = True,
-    #     action = "store_true",
-    #     help = " Wait for and track the scan until it finishes"
-    # )
-
     parser.add_argument(
         "--no-wait",
         default = False,
@@ -57,9 +50,22 @@ def parse_arguments():
         help = "Forces the script to not wait for and track results of the scan"
     )
 
-    arguments = parser.parse_args()
+    parser.add_argument(
+        "--report",
+        default = "checkmarx-report",
+        help = "The name of the file the report should be saved to."
+    )
 
-    return arguments
+    parser.add_argument(
+        "--report-filetype",
+        default = "csv",
+        choices = [
+            "csv"
+        ],
+        help = "The extension that Checkmarx should export the report as"
+    )
+
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
@@ -68,7 +74,13 @@ if __name__ == "__main__":
     # Check that the file provided is a zip file
     if not zipfile.is_zipfile(arguments.project_file):
         print("zip file is zip file")
-        exit()
+        exit(INVALID_ZIP_FILE)
 
     cx = Checkmarx(arguments)
     cx.scan()
+
+    # If we waited for the scan results and it finished, download the report
+    if not arguments.no_wait:
+        cx.get_report()
+
+    print()
