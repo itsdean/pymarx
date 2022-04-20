@@ -3,7 +3,12 @@ import requests
 REST_API_PATH = "/cxrestapi"
 AUTH_API_PATH = REST_API_PATH + "/auth/identity/connect/token"
 
+
 class Checkmarx:
+
+
+    def __authenticate(self):
+        pass
 
 
     def __check_validity(self, url):
