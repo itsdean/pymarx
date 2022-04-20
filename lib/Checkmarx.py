@@ -1,6 +1,8 @@
 from zipfile import error
 from requests_toolbelt import MultipartEncoder
+import csv
 import dateutil.parser
+import io
 import json
 import os
 import requests
@@ -35,7 +37,6 @@ class Checkmarx:
                 self.host,
                 timeout=5
             )
-            print(self.host)
             if response.status_code == 200:
                 print("Checkmarx API is accessible")
                 return True
@@ -324,7 +325,7 @@ class Checkmarx:
                 stage = scan_information["status"]["details"]["stage"]
 
                 message = "> Time elapsed: " \
-                            + str(counter)  + " seconds - " \
+                            + str(counter)  + "s - " \
                             + status
 
                 if stage != "":
@@ -391,10 +392,22 @@ class Checkmarx:
             stream = True
         )
 
+        json_object = {
+            "results": []
+        }
+
+        io_buffer = io.StringIO(response.text)
+        reader = csv.DictReader(io_buffer)
+
+        for row in reader:
+            json_object["results"].append(
+                json.loads(json.dumps(row))
+            )
+
         report_path = os.path.abspath(self.report_path)
+        full_report_path = report_path + ".json"
 
-        if self.report_filetype == "csv":
-            with open(report_path + ".csv", "wb") as report_file_object:
-                report_file_object.write(response.content)
+        with open (full_report_path, "w") as report_file_object:
+            json.dump(json_object, report_file_object)
 
-        print("> Report saved to " + report_path + "." + self.report_filetype + "!")
+        print("> Report saved to " + full_report_path + "!")
