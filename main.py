@@ -73,7 +73,6 @@ if __name__ == "__main__":
 
     # Check that the file provided is a zip file
     if not zipfile.is_zipfile(arguments.project_file):
-        print("zip file is zip file")
         exit(INVALID_ZIP_FILE)
 
     cx = Checkmarx(arguments)
