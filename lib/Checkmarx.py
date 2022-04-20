@@ -1,13 +1,17 @@
+from zipfile import error
 from requests_toolbelt import MultipartEncoder
-import datetime
 import dateutil.parser
 import json
+import os
 import requests
 import time
+
+from lib.constants import *
 
 REST_API_PATH = "/cxrestapi"
 AUTH_API_PATH = REST_API_PATH + "/auth/identity/connect/token"
 PROJECTS_API_PATH = REST_API_PATH + "/projects"
+RESULTS_API_PATH = REST_API_PATH + "/reports/sastScan"
 SCAN_API_PATH = REST_API_PATH + "/sast/scans"
 TEAMS_API_PATH = REST_API_PATH + "/auth/teams"
 
@@ -15,21 +19,23 @@ TEAMS_API_PATH = REST_API_PATH + "/auth/teams"
 class Checkmarx:
 
 
-    def __fail(self, response):
+    def __fail(self, response, error_code):
         print("\n")
         print("Response Status Code: " + str(response.status_code))
         print("--- Start of Response Body ---")
         print(response.text)
         print("--- End of Response Body ---")
         print("\n")
+        exit(error_code)
 
 
     def __check_host_validity(self):
-        try:        
+        try:
             response = requests.get(
                 self.host,
                 timeout=5
             )
+            print(self.host)
             if response.status_code == 200:
                 print("Checkmarx API is accessible")
                 return True
@@ -37,7 +43,7 @@ class Checkmarx:
         except requests.Timeout:
             print("Timed out connecting to the URL.")
             print("Please check it is accessible from where you are.")
-            exit(-1)
+            exit(HOST_TIMEOUT)
 
         return False
 
@@ -66,8 +72,7 @@ class Checkmarx:
 
         else:
             print("> Could not authenticate!")
-            self.__fail(response)
-            exit(-2)
+            self.__fail(response, AUTHENTICATION_FAILURE)
 
 
     def __init__(self, args):
@@ -79,10 +84,12 @@ class Checkmarx:
 
         self.a = args
 
+        self.report_path = self.a.report
+        self.report_filetype = self.a.report_filetype
+
         if args.no_wait:
             self.wait = False
 
-        # todo: existence logic
         self.project_file = self.a.project_file
         self.project_name = self.a.project_name
         self.team_name = self.a.team
@@ -118,8 +125,7 @@ class Checkmarx:
             return json.loads(response.text)
         else:
             print("There was an error retrieving projects.")
-            self.__fail(response)
-            exit(-3)
+            self.__fail(response, PROJECT_RETRIEVAL_FAILURE)
 
 
     def __get_project(self):
@@ -146,9 +152,7 @@ class Checkmarx:
             return json.loads(response.text)
         else:
             print("There was an error retrieving teams.")
-            print(response.status_code)
-            print(response.text)
-            exit(-4)
+            self.__fail(response, TEAM_RETRIEVAL_FAILURE)
 
 
     def __get_team(self):
@@ -189,15 +193,13 @@ class Checkmarx:
                 return json.loads(response.text)
             else:
                 print("There was an error creating a project.")
-                print(response.status_code)
-                print(response.text)
-                exit(-5)  
+                self.__fail(response, PROJECT_CREATION_FAILURE)
 
 
     def __upload_project_file(self):
         print("\nUploading " + self.project_file + "...")
 
-        # Get only the filename in case a path is provided 
+        # Get only the filename in case a path is provided
         project_file_name = self.project_file
         if "/" in self.project_file:
             project_file_name = self.project_file.split("/")[-1]
@@ -233,15 +235,11 @@ class Checkmarx:
             print("> Project file uploaded!")
         else:
             print("There was an error uploading the project file to Checkmarx.")
-            self.__fail(response)
-            exit(-6)
+            self.__fail(response, PROJECT_FILE_UPLOAD_FAILURE)
 
 
     def __check_scan(self):
 
-        status = ""
-
-        # scan_url = self.host + SCAN_API_PATH + "/" + self.scan_id
         scan_url = self.host + REST_API_PATH + self.scan_url
 
         response = requests.get(
@@ -257,8 +255,7 @@ class Checkmarx:
 
         else:
             print("There was an error retrieving the status of the scan.")
-            self.__fail(response)
-            exit(-8)
+            self.__fail(response, SCAN_STATUS_RETRIEVAL_FAILURE)
 
 
     def scan(self):
@@ -299,18 +296,16 @@ class Checkmarx:
             self.scan_url = json.loads(response.text)["link"]["uri"]
         else:
             print("> There was an error starting the scan.")
-            self.__fail(response)
-            exit(-7)
+            self.__fail(response, SCAN_START_FAILURE)
 
-        status = ""
         started = False
-        start_time = None
-        counter = 0
 
+        counter = 0
         sleep_duration = 5
 
-        while status != "Finished":
+        while True:
             scan_information = self.__check_scan()
+
             # On the first instance of getting scan information, output some start info
             if not started:
                 start_time = dateutil.parser.parse(
@@ -327,14 +322,79 @@ class Checkmarx:
                 counter += sleep_duration
                 status = scan_information["status"]["name"]
                 stage = scan_information["status"]["details"]["stage"]
-                step = scan_information["status"]["details"]["step"]
 
-                print("> Time elapsed: " + str(counter) + " seconds - " \
-                        + status \
-                        + " - " + stage)
+                message = "> Time elapsed: " \
+                            + str(counter)  + " seconds - " \
+                            + status
+
+                if stage != "":
+                    message += " - " + stage
+
+                print(message)
+
+                if status == "Finished":
+                    print("Scan complete!\n")
+                    break
+                elif "No code changes were detected" in stage:
+                    print("There we no code changes since the last scan!\n")
+                    break
 
             time.sleep(sleep_duration)
 
-        if status == "Finished":
-            print("\nScan complete!")
-        print()
+
+    def get_report(self):
+
+        print("Retrieving scan results...")
+
+        data = json.dumps(
+            {
+                "scanId": self.scan_id,
+                "reportType": self.report_filetype
+            }
+        )
+
+        response = requests.post(
+            self.host + RESULTS_API_PATH,
+            headers = self.headers,
+            data = data,
+            cookies = self.cookies,
+            verify = True,
+            stream = True
+        )
+
+        if response.status_code != 202:
+            print("There was an issue obtaining the scan results.")
+            self.__fail(response, REPORT_STATUS_RETRIEVAL_FAILURE)
+
+        report_url = json.loads(response.text)["links"]["report"]["uri"]
+        status_url = json.loads(response.text)["links"]["status"]["uri"]
+
+        value = "InProcess"
+
+        # Poll the API until the report has been created
+        while value != "Created":
+            response = requests.get(
+                self.host + REST_API_PATH + status_url,
+                headers = self.headers,
+                cookies = self.cookies,
+                verify = True,
+                stream = True
+            )
+            value = json.loads(response.text)["status"]["value"]
+            time.sleep(5)
+
+        response = requests.get(
+            self.host + REST_API_PATH + report_url,
+            headers = self.headers,
+            cookies = self.cookies,
+            verify = True,
+            stream = True
+        )
+
+        report_path = os.path.abspath(self.report_path)
+
+        if self.report_filetype == "csv":
+            with open(report_path + ".csv", "wb") as report_file_object:
+                report_file_object.write(response.content)
+
+        print("> Report saved to " + report_path + "." + self.report_filetype + "!")
